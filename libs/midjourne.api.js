@@ -3,29 +3,41 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.MidjourneyApi = void 0;
 const tslib_1 = require("tslib");
 const interfaces_1 = require("./interfaces");
-const queue_1 = require("./queue");
 const utls_1 = require("./utls");
-const fs = tslib_1.__importStar(require("fs"));
-const path_1 = tslib_1.__importDefault(require("path"));
-const mime = tslib_1.__importStar(require("mime"));
 const command_1 = require("./command");
+const async_1 = tslib_1.__importDefault(require("async"));
+const path_1 = tslib_1.__importDefault(require("path"));
 class MidjourneyApi extends command_1.Command {
     config;
-    apiQueue = (0, queue_1.CreateQueue)(1);
     UpId = Date.now() % 10; // upload id
     constructor(config) {
         super(config);
         this.config = config;
     }
-    // limit the number of concurrent interactions
-    async safeIteractions(payload) {
-        return this.apiQueue.addTask(() => new Promise((resolve) => {
-            this.interactions(payload, (res) => {
-                resolve(res);
+    safeIteractions = (request) => {
+        return new Promise((resolve, reject) => {
+            this.queue.push({
+                request,
+                callback: (any) => {
+                    resolve(any);
+                },
+            }, (error, result) => {
+                if (error) {
+                    reject(error);
+                }
+                else {
+                    resolve(result);
+                }
             });
-        }));
-    }
-    async interactions(payload, callback) {
+        });
+    };
+    processRequest = async ({ request, callback, }) => {
+        const httpStatus = await this.interactions(request);
+        callback(httpStatus);
+        await (0, utls_1.sleep)(this.config.ApiInterval);
+    };
+    queue = async_1.default.queue(this.processRequest, 1);
+    interactions = async (payload) => {
         try {
             const headers = {
                 "Content-Type": "application/json",
@@ -42,16 +54,13 @@ class MidjourneyApi extends command_1.Command {
                     config: this.config,
                 });
             }
-            callback && callback(response.status);
-            //discord api rate limit
-            await (0, utls_1.sleep)(950);
             return response.status;
         }
         catch (error) {
             console.error(error);
-            callback && callback(500);
+            return 500;
         }
-    }
+    };
     async ImagineApi(prompt, nonce = (0, utls_1.nextNonce)()) {
         const payload = await this.imaginePayload(prompt, nonce);
         return this.safeIteractions(payload);
@@ -112,6 +121,10 @@ class MidjourneyApi extends command_1.Command {
         });
     }
     async CustomApi({ msgId, customId, flags, nonce = (0, utls_1.nextNonce)(), }) {
+        if (!msgId)
+            throw new Error("msgId is empty");
+        if (flags === undefined)
+            throw new Error("flags is undefined");
         const payload = {
             type: 3,
             nonce,
@@ -119,7 +132,7 @@ class MidjourneyApi extends command_1.Command {
             channel_id: this.config.ChannelId,
             message_flags: flags,
             message_id: msgId,
-            application_id: "936929561302675456",
+            application_id: this.config.BotId,
             session_id: this.config.SessionId,
             data: {
                 component_type: 2,
@@ -132,7 +145,7 @@ class MidjourneyApi extends command_1.Command {
     async ModalSubmitApi({ nonce, msgId, customId, prompt, submitCustomId, }) {
         var payload = {
             type: 5,
-            application_id: "936929561302675456",
+            application_id: this.config.BotId,
             channel_id: this.config.ChannelId,
             guild_id: this.config.ServerId,
             data: {
@@ -212,27 +225,15 @@ class MidjourneyApi extends command_1.Command {
     }
     /**
      *
-     * @param fileUrl http or local file path
+     * @param fileUrl http file path
      * @returns
      */
-    async UploadImage(fileUrl) {
-        let fileData;
-        let mimeType;
-        let filename;
-        let file_size;
-        if (fileUrl.startsWith("http")) {
-            const response = await this.config.fetch(fileUrl);
-            fileData = await response.arrayBuffer();
-            mimeType = response.headers.get("content-type");
-            filename = path_1.default.basename(fileUrl) || "image.png";
-            file_size = fileData.byteLength;
-        }
-        else {
-            fileData = await fs.promises.readFile(fileUrl);
-            mimeType = mime.getType(fileUrl);
-            filename = path_1.default.basename(fileUrl);
-            file_size = (await fs.promises.stat(fileUrl)).size;
-        }
+    async UploadImageByUri(fileUrl) {
+        const response = await this.config.fetch(fileUrl);
+        const fileData = await response.arrayBuffer();
+        const mimeType = response.headers.get("content-type");
+        const filename = path_1.default.basename(fileUrl) || "image.png";
+        const file_size = fileData.byteLength;
         if (!mimeType) {
             throw new Error("Unknown mime type");
         }
@@ -243,12 +244,33 @@ class MidjourneyApi extends command_1.Command {
         });
         const UploadSlot = attachments[0];
         await this.uploadImage(UploadSlot, fileData, mimeType);
-        const response = {
+        const resp = {
             id: UploadSlot.id,
             filename: path_1.default.basename(UploadSlot.upload_filename),
             upload_filename: UploadSlot.upload_filename,
         };
-        return response;
+        return resp;
+    }
+    async UploadImageByBole(blob, filename = "image.png") {
+        const fileData = await blob.arrayBuffer();
+        const mimeType = blob.type;
+        const file_size = fileData.byteLength;
+        if (!mimeType) {
+            throw new Error("Unknown mime type");
+        }
+        const { attachments } = await this.attachments({
+            filename,
+            file_size,
+            id: this.UpId++,
+        });
+        const UploadSlot = attachments[0];
+        await this.uploadImage(UploadSlot, fileData, mimeType);
+        const resp = {
+            id: UploadSlot.id,
+            filename: path_1.default.basename(UploadSlot.upload_filename),
+            upload_filename: UploadSlot.upload_filename,
+        };
+        return resp;
     }
     /**
      * prepare an attachement to upload an image.

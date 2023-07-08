@@ -8,6 +8,7 @@ export declare class WsMessage {
     private closed;
     private event;
     private waitMjEvents;
+    private skipMessageId;
     private reconnectTime;
     private heartbeatInterval;
     UserId: string;
@@ -47,11 +48,13 @@ export declare class WsMessage {
     onceInfo(callback: (message: any) => void): void;
     onceSettings(callback: (message: any) => void): void;
     onceMJ(nonce: string, callback: (data: any) => void): void;
+    private removeSkipMessageId;
     private removeWaitMjEvent;
     onceImage(nonce: string, callback: (data: MJEmit) => void): void;
-    waitImageMessage({ nonce, prompt, onmodal, loading, }: {
+    waitImageMessage({ nonce, prompt, onmodal, messageId, loading, }: {
         nonce: string;
         prompt?: string;
+        messageId?: string;
         onmodal?: OnModal;
         loading?: LoadingHandler;
     }): Promise<MJMessage | null>;

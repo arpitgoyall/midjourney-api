@@ -9,6 +9,7 @@ export declare class Midjourney extends MidjourneyMessage {
     Connect(): Promise<Midjourney>;
     init(): Promise<this>;
     Imagine(prompt: string, loading?: LoadingHandler): Promise<import("./interfaces").MJMessage | null>;
+    private getWsClient;
     Settings(): Promise<import("./interfaces").MJSettings | null>;
     Reset(): Promise<void>;
     Info(): Promise<import("./interfaces").MJInfo | null>;

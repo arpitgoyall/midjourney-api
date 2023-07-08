@@ -18,18 +18,20 @@ export interface MJConfig {
     DiscordBaseUrl: string;
     WsBaseUrl: string;
     fetch: FetchFn;
+    ApiInterval: number;
     WebSocket: WebSocketCl;
 }
 export interface MJConfigParam {
     SalaiToken: string;
     ChannelId?: string;
+    ServerId?: string;
     BotId?: typeof MJBot | typeof NijiBot;
     Debug?: boolean;
+    ApiInterval?: number;
     Limit?: number;
     MaxWait?: number;
     Ws?: boolean;
     HuggingFaceToken?: string;
-    ServerId?: string;
     SessionId?: string;
     DiscordBaseUrl?: string;
     WsBaseUrl?: string;

@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.MidjourneyMessage = void 0;
+const tslib_1 = require("tslib");
 const interfaces_1 = require("./interfaces");
-const queue_1 = require("./queue");
 const utls_1 = require("./utls");
+const async_1 = tslib_1.__importDefault(require("async"));
 class MidjourneyMessage {
-    magApiQueue = (0, queue_1.CreateQueue)(1);
     config;
     constructor(defaults) {
         const { SalaiToken } = defaults;
@@ -17,6 +17,29 @@ class MidjourneyMessage {
             ...defaults,
         };
     }
+    safeRetrieveMessages = (request = 50) => {
+        return new Promise((resolve, reject) => {
+            this.queue.push({
+                request,
+                callback: (any) => {
+                    resolve(any);
+                },
+            }, (error, result) => {
+                if (error) {
+                    reject(error);
+                }
+                else {
+                    resolve(result);
+                }
+            });
+        });
+    };
+    processRequest = async ({ request, callback, }) => {
+        const httpStatus = await this.RetrieveMessages(request);
+        callback(httpStatus);
+        await (0, utls_1.sleep)(this.config.ApiInterval);
+    };
+    queue = async_1.default.queue(this.processRequest, 1);
     log(...args) {
         this.config.Debug && console.log(...args, new Date().toISOString());
     }
@@ -26,7 +49,7 @@ class MidjourneyMessage {
         const data = await this.safeRetrieveMessages(this.config.Limit);
         for (let i = 0; i < data.length; i++) {
             const item = data[i];
-            if (item.author.id === "936929561302675456" &&
+            if (item.author.id === this.config.BotId &&
                 item.content.includes(`${seed}`)) {
                 const itemTimestamp = new Date(item.timestamp).getTime();
                 if (itemTimestamp < timestamp) {
@@ -52,6 +75,7 @@ class MidjourneyMessage {
                     content,
                     id: item.id,
                     uri: imageUrl,
+                    proxy_url: item.attachments[0].proxy_url,
                     flags: item.flags,
                     hash: this.UriToHash(imageUrl),
                     progress: "done",
@@ -90,10 +114,6 @@ class MidjourneyMessage {
             await (0, utls_1.sleep)(1000 * 2);
         }
         return null;
-    }
-    // limit the number of concurrent interactions
-    async safeRetrieveMessages(limit = 50) {
-        return this.magApiQueue.addTask(() => this.RetrieveMessages(limit));
     }
     async RetrieveMessages(limit = this.config.Limit) {
         const headers = {

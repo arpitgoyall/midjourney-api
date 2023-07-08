@@ -2,11 +2,12 @@ import { DiscordImage, MJConfig, ModalSubmitID } from "./interfaces";
 import { Command } from "./command";
 export declare class MidjourneyApi extends Command {
     config: MJConfig;
-    private apiQueue;
     UpId: number;
     constructor(config: MJConfig);
-    protected safeIteractions(payload: any): Promise<number>;
-    protected interactions(payload: any, callback?: (result: number) => void): Promise<number | undefined>;
+    private safeIteractions;
+    private processRequest;
+    private queue;
+    private interactions;
     ImagineApi(prompt: string, nonce?: string): Promise<number>;
     SwitchRemixApi(nonce?: string): Promise<number>;
     ShortenApi(prompt: string, nonce?: string): Promise<number>;
@@ -80,10 +81,11 @@ export declare class MidjourneyApi extends Command {
     RelaxApi(nonce?: string): Promise<number>;
     /**
      *
-     * @param fileUrl http or local file path
+     * @param fileUrl http file path
      * @returns
      */
-    UploadImage(fileUrl: string): Promise<DiscordImage>;
+    UploadImageByUri(fileUrl: string): Promise<DiscordImage>;
+    UploadImageByBole(blob: Blob, filename?: string): Promise<DiscordImage>;
     /**
      * prepare an attachement to upload an image.
      */
