@@ -9,33 +9,48 @@ import {
   UploadParam,
   UploadSlot,
 } from "./interfaces";
-import { CreateQueue } from "./queue";
 import { nextNonce, sleep } from "./utls";
-import * as fs from "fs";
-import path from "path";
-import * as mime from "mime";
 import { Command } from "./command";
+import async from "async";
+import path from "path";
+
 export class MidjourneyApi extends Command {
-  private apiQueue = CreateQueue(1);
   UpId = Date.now() % 10; // upload id
   constructor(public config: MJConfig) {
     super(config);
   }
-  // limit the number of concurrent interactions
-  protected async safeIteractions(payload: any) {
-    return this.apiQueue.addTask(
-      () =>
-        new Promise<number>((resolve) => {
-          this.interactions(payload, (res) => {
-            resolve(res);
-          });
-        })
-    );
-  }
-  protected async interactions(
-    payload: any,
-    callback?: (result: number) => void
-  ) {
+  private safeIteractions = (request: any) => {
+    return new Promise<number>((resolve, reject) => {
+      this.queue.push(
+        {
+          request,
+          callback: (any: any) => {
+            resolve(any);
+          },
+        },
+        (error: any, result: any) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
+      );
+    });
+  };
+  private processRequest = async ({
+    request,
+    callback,
+  }: {
+    request: any;
+    callback: (any: any) => void;
+  }) => {
+    const httpStatus = await this.interactions(request);
+    callback(httpStatus);
+    await sleep(this.config.ApiInterval);
+  };
+  private queue = async.queue(this.processRequest, 1);
+  private interactions = async (payload: any) => {
     try {
       const headers = {
         "Content-Type": "application/json",
@@ -55,15 +70,13 @@ export class MidjourneyApi extends Command {
           config: this.config,
         });
       }
-      callback && callback(response.status);
-      //discord api rate limit
-      await sleep(950);
       return response.status;
     } catch (error) {
       console.error(error);
-      callback && callback(500);
+      return 500;
     }
-  }
+  };
+
   async ImagineApi(prompt: string, nonce: string = nextNonce()) {
     const payload = await this.imaginePayload(prompt, nonce);
     return this.safeIteractions(payload);
@@ -77,6 +90,7 @@ export class MidjourneyApi extends Command {
     const payload = await this.shortenPayload(prompt, nonce);
     return this.safeIteractions(payload);
   }
+
   async VariationApi({
     index,
     msgId,
@@ -97,6 +111,7 @@ export class MidjourneyApi extends Command {
       nonce,
     });
   }
+
   async UpscaleApi({
     index,
     msgId,
@@ -117,6 +132,7 @@ export class MidjourneyApi extends Command {
       nonce,
     });
   }
+
   async RerollApi({
     msgId,
     hash,
@@ -183,6 +199,8 @@ export class MidjourneyApi extends Command {
     flags: number;
     nonce?: string;
   }) {
+    if (!msgId) throw new Error("msgId is empty");
+    if (flags === undefined) throw new Error("flags is undefined");
     const payload = {
       type: 3,
       nonce,
@@ -190,7 +208,7 @@ export class MidjourneyApi extends Command {
       channel_id: this.config.ChannelId,
       message_flags: flags,
       message_id: msgId,
-      application_id: "936929561302675456",
+      application_id: this.config.BotId,
       session_id: this.config.SessionId,
       data: {
         component_type: 2,
@@ -199,6 +217,7 @@ export class MidjourneyApi extends Command {
     };
     return this.safeIteractions(payload);
   }
+
   //FIXME: get SubmitCustomId from discord api
   async ModalSubmitApi({
     nonce,
@@ -215,7 +234,7 @@ export class MidjourneyApi extends Command {
   }) {
     var payload = {
       type: 5,
-      application_id: "936929561302675456",
+      application_id: this.config.BotId,
       channel_id: this.config.ChannelId,
       guild_id: this.config.ServerId,
       data: {
@@ -240,6 +259,7 @@ export class MidjourneyApi extends Command {
     console.log("submitCustomId", JSON.stringify(payload));
     return this.safeIteractions(payload);
   }
+
   async RemixApi({
     nonce,
     msgId,
@@ -259,6 +279,7 @@ export class MidjourneyApi extends Command {
       submitCustomId: RemixModalSubmitID,
     });
   }
+
   async ShortenImagineApi({
     nonce,
     msgId,
@@ -327,41 +348,33 @@ export class MidjourneyApi extends Command {
     const payload = await this.infoPayload(nonce);
     return this.safeIteractions(payload);
   }
+
   async SettingsApi(nonce?: string) {
     const payload = await this.settingsPayload(nonce);
     return this.safeIteractions(payload);
   }
+
   async FastApi(nonce?: string) {
     const payload = await this.fastPayload(nonce);
     return this.safeIteractions(payload);
   }
+
   async RelaxApi(nonce?: string) {
     const payload = await this.relaxPayload(nonce);
     return this.safeIteractions(payload);
   }
+
   /**
    *
-   * @param fileUrl http or local file path
+   * @param fileUrl http file path
    * @returns
    */
-  async UploadImage(fileUrl: string) {
-    let fileData;
-    let mimeType;
-    let filename;
-    let file_size;
-
-    if (fileUrl.startsWith("http")) {
-      const response = await this.config.fetch(fileUrl);
-      fileData = await response.arrayBuffer();
-      mimeType = response.headers.get("content-type");
-      filename = path.basename(fileUrl) || "image.png";
-      file_size = fileData.byteLength;
-    } else {
-      fileData = await fs.promises.readFile(fileUrl);
-      mimeType = mime.getType(fileUrl);
-      filename = path.basename(fileUrl);
-      file_size = (await fs.promises.stat(fileUrl)).size;
-    }
+  async UploadImageByUri(fileUrl: string) {
+    const response = await this.config.fetch(fileUrl);
+    const fileData = await response.arrayBuffer();
+    const mimeType = response.headers.get("content-type");
+    const filename = path.basename(fileUrl) || "image.png";
+    const file_size = fileData.byteLength;
     if (!mimeType) {
       throw new Error("Unknown mime type");
     }
@@ -372,12 +385,34 @@ export class MidjourneyApi extends Command {
     });
     const UploadSlot = attachments[0];
     await this.uploadImage(UploadSlot, fileData, mimeType);
-    const response: DiscordImage = {
+    const resp: DiscordImage = {
       id: UploadSlot.id,
       filename: path.basename(UploadSlot.upload_filename),
       upload_filename: UploadSlot.upload_filename,
     };
-    return response;
+    return resp;
+  }
+
+  async UploadImageByBole(blob: Blob, filename = "image.png") {
+    const fileData = await blob.arrayBuffer();
+    const mimeType = blob.type;
+    const file_size = fileData.byteLength;
+    if (!mimeType) {
+      throw new Error("Unknown mime type");
+    }
+    const { attachments } = await this.attachments({
+      filename,
+      file_size,
+      id: this.UpId++,
+    });
+    const UploadSlot = attachments[0];
+    await this.uploadImage(UploadSlot, fileData, mimeType);
+    const resp: DiscordImage = {
+      id: UploadSlot.id,
+      filename: path.basename(UploadSlot.upload_filename),
+      upload_filename: UploadSlot.upload_filename,
+    };
+    return resp;
   }
 
   /**
@@ -408,6 +443,7 @@ export class MidjourneyApi extends Command {
     } ${await response.text()}`;
     throw new Error(error);
   }
+
   private async uploadImage(
     slot: UploadSlot,
     data: ArrayBuffer,
@@ -428,6 +464,7 @@ export class MidjourneyApi extends Command {
       );
     }
   }
+
   async DescribeApi(image: DiscordImage, nonce?: string) {
     const payload = await this.describePayload(image, nonce);
     return this.safeIteractions(payload);
