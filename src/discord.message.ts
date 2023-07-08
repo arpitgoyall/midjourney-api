@@ -5,11 +5,10 @@ import {
   MJConfig,
   MJConfigParam,
 } from "./interfaces";
-import { CreateQueue } from "./queue";
 import { formatOptions, sleep } from "./utls";
+import async from "async";
 
 export class MidjourneyMessage {
-  private magApiQueue = CreateQueue(1);
   public config: MJConfig;
   constructor(defaults: MJConfigParam) {
     const { SalaiToken } = defaults;
@@ -21,6 +20,38 @@ export class MidjourneyMessage {
       ...defaults,
     };
   }
+  private safeRetrieveMessages = (request = 50) => {
+    return new Promise<any>((resolve, reject) => {
+      this.queue.push(
+        {
+          request,
+          callback: (any: any) => {
+            resolve(any);
+          },
+        },
+        (error: any, result: any) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
+      );
+    });
+  };
+  private processRequest = async ({
+    request,
+    callback,
+  }: {
+    request: any;
+    callback: (any: any) => void;
+  }) => {
+    const httpStatus = await this.RetrieveMessages(request);
+    callback(httpStatus);
+    await sleep(this.config.ApiInterval);
+  };
+  private queue = async.queue(this.processRequest, 1);
+
   protected log(...args: any[]) {
     this.config.Debug && console.log(...args, new Date().toISOString());
   }
@@ -35,7 +66,7 @@ export class MidjourneyMessage {
     for (let i = 0; i < data.length; i++) {
       const item = data[i];
       if (
-        item.author.id === "936929561302675456" &&
+        item.author.id === this.config.BotId &&
         item.content.includes(`${seed}`)
       ) {
         const itemTimestamp = new Date(item.timestamp).getTime();
@@ -64,6 +95,7 @@ export class MidjourneyMessage {
           content,
           id: item.id,
           uri: imageUrl,
+          proxy_url: item.attachments[0].proxy_url,
           flags: item.flags,
           hash: this.UriToHash(imageUrl),
           progress: "done",
@@ -108,10 +140,6 @@ export class MidjourneyMessage {
     return null;
   }
 
-  // limit the number of concurrent interactions
-  protected async safeRetrieveMessages(limit = 50) {
-    return this.magApiQueue.addTask(() => this.RetrieveMessages(limit));
-  }
   async RetrieveMessages(limit = this.config.Limit) {
     const headers = {
       "Content-Type": "application/json",

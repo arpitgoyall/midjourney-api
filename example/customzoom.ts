@@ -17,8 +17,14 @@ async function main() {
     Ws: true, //enable ws is required for custom zoom
   });
   await client.init();
-  const prompt = "Christmas dinner with spaghetti with family in a cozy house, we see interior details , simple blue&white illustration"
-  const Imagine = await client.Imagine(prompt);
+  const prompt =
+    "Christmas dinner with spaghetti with family in a cozy house, we see interior details , simple blue&white illustration";
+  const Imagine = await client.Imagine(
+    prompt,
+    (uri: string, progress: string) => {
+      console.log("loading", uri, "progress", progress);
+    }
+  );
   console.log(Imagine);
   if (!Imagine) {
     console.log("no message");
@@ -57,7 +63,11 @@ async function main() {
   console.log("Custom Zoom", zoomout2x);
   client.Close();
 }
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main()
+  .then(() => {
+    console.log("done");
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
