@@ -188,6 +188,25 @@ export class MidjourneyApi extends Command {
     });
   }
 
+  async MakeSquare({
+    msgId,
+    hash,
+    nonce = nextNonce(),
+    flags,
+  }: {
+    msgId: string;
+    hash: string;
+    nonce?: string;
+    flags: number;
+  }) {
+    return this.CustomApi({
+      msgId,
+      customId: `MJ::Outpaint::100::1::${hash}::SOLO`,
+      flags,
+      nonce,
+    });
+  }
+
   async ZoomOutApi({
     level,
     msgId,
