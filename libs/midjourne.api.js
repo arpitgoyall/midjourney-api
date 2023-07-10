@@ -97,6 +97,29 @@ class MidjourneyApi extends command_1.Command {
             nonce,
         });
     }
+    async PanApi({ direction, msgId, hash, nonce = (0, utls_1.nextNonce)(), flags, }) {
+        let customId;
+        switch (direction) {
+            case "left":
+                customId = `MJ::JOB::pan_left::1::${hash}::SOLO`;
+                break;
+            case "right":
+                customId = `MJ::JOB::pan_right::1::${hash}::SOLO`;
+                break;
+            case "up":
+                customId = `MJ::JOB::pan_up::1::${hash}::SOLO`;
+                break;
+            case "down":
+                customId = `MJ::JOB::pan_down::1::${hash}::SOLO`;
+                break;
+        }
+        return this.CustomApi({
+            msgId,
+            customId: customId,
+            flags,
+            nonce,
+        });
+    }
     async ZoomOutApi({ level, msgId, hash, nonce = (0, utls_1.nextNonce)(), flags, }) {
         let customId;
         switch (level) {
