@@ -38,6 +38,12 @@ export declare class MidjourneyApi extends Command {
         nonce?: string;
         flags: number;
     }): Promise<number>;
+    MakeSquare({ msgId, hash, nonce, flags, }: {
+        msgId: string;
+        hash: string;
+        nonce?: string;
+        flags: number;
+    }): Promise<number>;
     ZoomOutApi({ level, msgId, hash, nonce, flags, }: {
         level: "high" | "low" | "2x" | "1.5x";
         msgId: string;

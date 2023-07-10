@@ -120,6 +120,14 @@ class MidjourneyApi extends command_1.Command {
             nonce,
         });
     }
+    async MakeSquare({ msgId, hash, nonce = (0, utls_1.nextNonce)(), flags, }) {
+        return this.CustomApi({
+            msgId,
+            customId: `MJ::Outpaint::100::1::${hash}::SOLO`,
+            flags,
+            nonce,
+        });
+    }
     async ZoomOutApi({ level, msgId, hash, nonce = (0, utls_1.nextNonce)(), flags, }) {
         let customId;
         switch (level) {
